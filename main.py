@@ -1,48 +1,39 @@
 """
-Using Voyager vector similarity library from spotify
-the lib returns squared Euclidean distances, instead of the std. 
-query() -> method allows finding the k nearest int key to a provided List[float]        
+Author: Junsung Kim
+Simualte how spotify might curate a playlist for a user by finding songs
+
+Through song parameters: tempo, energy, bpm, etc. Each paramater will be a different 
+dimensions in the vector space. i.e. 5 parameters -> 5D vector space
+
 
 """
 
 import numpy as np
 from voyager import Index, Space
 
-class VectorIndex:
-    
-    # wrapper functions
-    def __init__(self, num_dimensions, space=Space.Euclidean):
-        self.index = Index(space, num_dimensions=num_dimensions)
-        self.num_dimensions = num_dimensions
+# i.e each song is represented as a vector. 
+songs = {
+    0: [0.8, 0.7, 120, 0.6, 0.1],
+    1: [0.6, 0.8, 125, 0.7, 0.2],
+    2: [0.2, 0.3, 90, 0.2, 0.8],
+    3: [0.9, 0.5, 85, 0.65, 0.15],
+    4: [0.3, 0.6, 118, 0.1, 0.30],
+    5: [0.2, 0.2, 88, 0.15, 0.9],
 
-    def add_vector(self, vector, id=None):
-        vector = np.array(vector, dtype=np.float32)
-        if vector.shape[0] != self.num_dimensions:
-            raise ValueError(f"Vector must have {self.num_dimensions} dimensions.")
-        return self.index.add_item(vector, id=id)
-    
-    def add_vectors(self, vectors, ids=None):
-        vectors = np.array(vectors, dtype=np.float32)
-        if vectors.shape[1] != self.num_dimensions:
-            raise ValueError(f"Each vector must have {self.num_dimensions} dimensions.")
-        return self.index.add_items(vectors, ids=ids)
-    
-    def query(self, vector, k=1):
-        vector = np.array(vector, dtype=np.float32)
-        neighbors, distances = self.index.query(vector, k=k)
-        return neighbors, distances
-    
-    def __contains__(self, id):
-        return id in self.index
-    
-    def __len__(self):
-        return len(self.index)
-    
-if __name__ == "__main__":
-    vi = VectorIndex(num_dimensions=5)
-    id_a = vi.add_vector([1, 2, 3, 4, 5])
-    id_b = vi.add_vector([6, 7, 8, 9, 10])
+}
 
-    neighbors, distances = vi.query([1, 2, 3, 4, 5], k=2)
-    print("Neighbors IDs:", neighbors)
-    print("Squared Distance:", distances)
+# building the index
+index = Index(Space.Euclidean, num_dimensions=5)
+
+# adding the songs
+for song_id, features in songs.items():
+    index.add_item(np.array(features, dtype=np.float32), id=song_id)
+
+liked_vectors = [songs[0], songs[3]]
+taste_vectors = np.mean(liked_vectors, axis=0)
+
+# Finding 3 songs most similar to users taste
+neighbors, distances = index.query(np.array(taste_vectors, dtype=np.float32), k=3)
+
+print("Recommened song IDs", neighbors)
+print("Similiarity:", distances)
