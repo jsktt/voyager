@@ -7,8 +7,10 @@ dimensions in the vector space. i.e. 5 parameters -> 5D vector space
 
 
 """
-
+import spotipy
+from spotipy.oauth2 import SpotifyOAuth
 import numpy as np
+import pandas as pd
 from voyager import Index, Space
 
 # i.e each song is represented as a vector. 
