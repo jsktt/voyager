@@ -1,98 +1,88 @@
-import os
-import spotipy
 import pandas as pd
-from dotenv import load_dotenv
 import numpy as np
-from spotipy.oauth2 import SpotifyOAuth
 from voyager import Index, Space
+import time
+from auth import get_spotify_clients
 
-load_dotenv() # loading env variables 
-
-# debugging
-if not all([
-    os.getenv('SPOTIFY_CLIENT_ID'),
-    os.getenv('SPOTIFY_CLIENT_SECRET'),
-    os.getenv('SPOTIFY_REDIRECT_URI')]):
-    raise ValueError("Missing Spotify credientials in .env file")
-
-scope = " ".join([
-    'user-library-read',
-    'playlist-read-private',
-    'user-top-read',
-    'user-read-recently-played'
-])
-
-try:
-    # Spotify API
-    sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
-
-        client_id=os.getenv('SPOTIFY_CLIENT_ID'),
-        client_secret=os.getenv('SPOTIFY_CLIENT_SECRET'),
-        redirect_uri=os.getenv('SPOTIFY_REDIRECT_URI'),
-        scope=scope,
-        open_browser=True # opens auth page
-    ))
-    # verify connection
-    sp.current_user()
-except Exception as e:
-    print(f"Authentication Error: {str(e)}")
-    raise
+# get authenticated spotify clients
+sp_user, sp_public = get_spotify_clients()
 
 
-def get_audio_features(track_ids):
-    # getting audio features for a list of track IDs
-    features = sp.audio_features(track_ids)
-    return features
-
-def get_liked_songs(limit=50):
-    # getting users liked songs
-    results = sp.current_user_saved_tracks(limit=limit)
+def get_top_tracks(limit=20, time_range="short_term"):
+    """
+    retrieve users top tracks
+    short_term -> last 4 weeks. 
+    
+    """
+    results = sp_user.current_user_top_tracks(limit=limit, time_range=time_range)
     tracks = results['items']
 
     track_data = []
     for track in tracks:
-        track_info = track['track']
         track_data.append({
-            'id': track_info['id'],
-            'name': track_info['name'],
-            'artists': track_info['artists'][0]['name']
+            'id': track['id'],
+            'name': track['name'],
+            'artists': ", ".join([artist['name'] for artist in track['artists']]),
+            'popularity': track['popularity']
         })
 
     return track_data
 
-# getting liked songs, and their features
-liked_songs = get_liked_songs(limit=50)
-track_ids = [song['id'] for song in liked_songs]
-audio_features = get_audio_features(track_ids)
 
-# creatung feature vectors
-features_to_use = ['loudness, energy, daceability, '
-                    'valence, tempo, acousticness, liveness, speechiness']
+def get_audio_features(track_ids):
+    """
+    get audio features for a list of track IDS
+    
+    """
+    # filter out None, or empty track IDs. 
+    valid_track_ids = [tid for tid in track_ids if tid and isinstance(tid, str)]
+    # debugging purposes
+    print(f"Fetching audio features for {len(valid_track_ids)} tracks...")
 
-songs = {}
+    try:
+        features = sp_public.audio_features(valid_track_ids)
 
-for i, features in enumerate(audio_features):
-    # if feature exist
-    if features:
-        vector = [features[feat] for feat in features_to_use]
-        songs[i] = vector
+        # filter non responses
+        features = [f for f in features if f] # filtering None responses. 
+        print(f"Successfully retrieved audio features for {len(features)} tracks")
 
-# Building inde with higher M value
-index = Index(Space.Euclidean, num_dimensions=5, M=6)
+        return features
+    except Exception as e:
+        print(f"Error fetching audio features: {e}")
+        raise
 
-# add songs
-for song_id, features in songs.items():
-    index.add_item(np.array(features, dtype=np.float32), id=song_id)
+    
+if __name__ == "__main__":
 
-# get users taste vector from first two liked songs
-liked_vectors = [songs[0], songs[1]]
-taste_vector = np.mean(liked_vectors, axis=0)
+    # getting top tracks
+    top_tracks = get_top_tracks(limit=20, time_range="short_term")
+    print("Top 20 Most Listened Songs")
+    for idx, track in enumerate(top_tracks, start=1):
+        print(f"{idx}. {track['name']} by {track['artists']} (Popularity: {track['popularity']})")
 
-# get 3 sings tailored to users taste
-neighbors, distances = index.query(np.array(taste_vector, dtype=np.float32), k=3)
+    # getting track IDs and audio features
+    track_ids = [track['id'] for track in top_tracks]
+    print(f"\nTrack IDs: {track_ids[:3]}...") # printing the first 3 IDs. 
 
-# priting recs
-print("\nRecommended Songs:")
-for neighbor_id in neighbors:
-    song = liked_songs[neighbor_id]
-    print(f"- {song['name']} by {song['artist']}")
+    try:
+        audio_features = get_audio_features(track_ids)
+
+        if audio_features:
+            print(f"Example features: {list(audio_features[0].keys())}")
+            print(f"\nSuccessfully retrieved audio features for {len(audio_features)} tracks")
+        else:
+            print("\n no features were retreived")
+            
+    except Exception as e:
+        print(f"Failed to get audio features {e}")
+
+
+
+    
+
+
+
+
+
+
+
